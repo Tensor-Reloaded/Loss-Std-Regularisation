@@ -27,6 +27,7 @@ def main():
     parser.add_argument('--num_workers_train', default=4, type=int, help='number of workers for loading train data')
     parser.add_argument('--num_workers_test', default=2, type=int, help='number of workers for loading test data')
     parser.add_argument('--cuda', default=torch.cuda.is_available(), type=bool, help='whether cuda is in use')
+    parser.add_argument('--std_loss', '-std', action='store_true', help='add std loss')
     args = parser.parse_args()
 
     solver = Solver(args)
@@ -44,6 +45,16 @@ class Solver(object):
         self.cuda = config.cuda
         self.train_loader = None
         self.test_loader = None
+        self.train_batch_idx = 0
+        self.test_batch_idx = 0
+
+    def get_train_batch_idx(self):
+        self.train_batch_idx += 1
+        return self.train_batch_idx - 1
+
+    def get_test_batch_idx(self):
+        self.test_batch_idx += 1
+        return self.test_batch_idx - 1
 
     def load_data(self):
         train_transform = transforms.Compose([transforms.RandomHorizontalFlip(), transforms.ToTensor()])
@@ -63,8 +74,8 @@ class Solver(object):
         self.model = eval(self.args.model).to(self.device)
 
         self.optimizer = optim.SGD(self.model.parameters(), lr=self.args.lr, momentum=self.args.momentum)
-        self.scheduler = optim.lr_scheduler.MultiStepLR(self.optimizer, milestones=[75, 150], gamma=0.5)
-        self.criterion = nn.CrossEntropyLoss().to(self.device)
+        self.scheduler = optim.lr_scheduler.MultiStepLR(self.optimizer, milestones=[30, 60, 90, 120, 150], gamma=0.5)
+        self.criterion = nn.CrossEntropyLoss(reduction='none').to(self.device)
 
     def train(self):
         print("train:")
@@ -72,12 +83,25 @@ class Solver(object):
         train_loss = 0
         train_correct = 0
         total = 0
+        total_std = 0
 
         for batch_num, (data, target) in enumerate(self.train_loader):
             data, target = data.to(self.device), target.to(self.device)
             self.optimizer.zero_grad()
             output = self.model(data)
             loss = self.criterion(output, target)
+            loss_mean = loss.mean()
+            loss_std = loss.std()
+
+            plot_idx = self.get_train_batch_idx()
+            total_std += loss_std.item()
+
+            add_chart_point("TrainPerBatchStd", plot_idx, loss_std.item())
+            add_chart_point("TrainPerBatchMean", plot_idx, loss_mean.item())
+
+            loss = loss_mean
+            if self.args.std_loss:
+                loss = loss + loss_std
             loss.backward()
             self.optimizer.step()
             train_loss += loss.item()
@@ -87,10 +111,10 @@ class Solver(object):
             # train_correct incremented by one if predicted right
             train_correct += np.sum(prediction[1].cpu().numpy() == target.cpu().numpy())
 
-            progress_bar(batch_num, len(self.train_loader), 'Loss: %.4f | Acc: %.3f%% (%d/%d)'
-                         % (train_loss / (batch_num + 1), 100. * train_correct / total, train_correct, total))
+            # progress_bar(batch_num, len(self.train_loader), 'Loss: %.4f | Acc: %.3f%% (%d/%d)'
+            #              % (train_loss / (batch_num + 1), 100. * train_correct / total, train_correct, total))
 
-        return train_loss, train_correct / total
+        return train_loss / len(self.train_loader), train_correct / total, total_std / len(self.train_loader)
 
     def test(self):
         print("test:")
@@ -98,21 +122,32 @@ class Solver(object):
         test_loss = 0
         test_correct = 0
         total = 0
-
+        total_std = 0
         with torch.no_grad():
             for batch_num, (data, target) in enumerate(self.test_loader):
                 data, target = data.to(self.device), target.to(self.device)
                 output = self.model(data)
                 loss = self.criterion(output, target)
+
+                plot_idx = self.get_test_batch_idx()
+                loss_mean = loss.mean()
+                loss_std = loss.std()
+
+                total_std += loss_std.item()
+
+                add_chart_point("TestPerBatchStd", plot_idx, loss_std.item())
+                add_chart_point("TestPerBatchMean", plot_idx, loss_mean.item())
+
+                loss = loss_mean
                 test_loss += loss.item()
                 prediction = torch.max(output, 1)
                 total += target.size(0)
                 test_correct += np.sum(prediction[1].cpu().numpy() == target.cpu().numpy())
 
-                progress_bar(batch_num, len(self.test_loader), 'Loss: %.4f | Acc: %.3f%% (%d/%d)'
-                             % (test_loss / (batch_num + 1), 100. * test_correct / total, test_correct, total))
+                # progress_bar(batch_num, len(self.test_loader), 'Loss: %.4f | Acc: %.3f%% (%d/%d)'
+                #              % (test_loss / (batch_num + 1), 100. * test_correct / total, test_correct, total))
 
-        return test_loss, test_correct / total
+        return test_loss / len(self.test_loader), test_correct / total , total_std / len(self.test_loader)
 
     def save(self):
         model_out_path = "model.pth"
@@ -128,6 +163,15 @@ class Solver(object):
         begin_per_epoch_chart("TrainLoss")
         begin_per_epoch_chart("TestLoss")
 
+        begin_chart("TrainPerBatchMean", "BatchIdx")
+        begin_chart("TestPerBatchMean", "BatchIdx")
+
+        begin_chart("TrainPerBatchStd", "BatchIdx")
+        begin_chart("TestPerBatchStd", "BatchIdx")
+
+        begin_per_epoch_chart("TrainStd")
+        begin_per_epoch_chart("TestStd")
+
         reset_seed(0)
         accuracy = 0
         for epoch in range(1, self.args.epoch + 1):
@@ -136,11 +180,13 @@ class Solver(object):
             train_result = self.train()
             add_chart_point("TrainAcc", epoch, train_result[1])
             add_chart_point("TrainLoss", epoch, train_result[0])
+            add_chart_point("TrainStd", epoch, train_result[2])
             print(train_result)
             test_result = self.test()
 
             add_chart_point("TestAcc", epoch, test_result[1])
             add_chart_point("TestLoss", epoch, test_result[0])
+            add_chart_point("TestStd", epoch, test_result[2])
 
             accuracy = max(accuracy, test_result[1])
             if epoch == self.args.epoch:
