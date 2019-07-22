@@ -10,7 +10,7 @@ class MultiLossModel(nn.Module):
         precisions = torch.exp(-1 * self.weights)
         weighted_losses = losses * precisions
         weighted_losses = weighted_losses.sum()
-        weighted_losses = weighted_losses + self.weights.sum()
+        weighted_losses = weighted_losses
 
         return weighted_losses
 
