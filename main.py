@@ -18,6 +18,7 @@ CLASSES = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship'
 def main():
     parser = argparse.ArgumentParser(description="cifar-10 with PyTorch")
     parser.add_argument('--lr', default=0.01, type=float, help='learning rate')
+    parser.add_argument('--multi_loss_lr', default=0.01, type=float, help='learning rate')
     parser.add_argument('--momentum', default=0.0, type=float, help='sgd momentum')
     parser.add_argument('--wd', default=0.0, type=float, help='weight decay')
     parser.add_argument('--model', default="VGG('VGG19')", type=str, help='what model to use')
@@ -74,8 +75,10 @@ class Solver(object):
             self.device = torch.device('cpu')
 
         self.model = eval(self.args.model).to(self.device)
+        self.multi_loss = MultiLossModel(2).to(self.device)
 
         self.optimizer = optim.SGD(self.model.parameters(), lr=self.args.lr, momentum=self.args.momentum)
+        self.multi_loss_optimizer = optim.SGD(self.multi_loss.parameters(), lr = self.args.multi_loss_lr, momentum=0.2)
         self.scheduler = optim.lr_scheduler.MultiStepLR(self.optimizer, milestones=[30, 60, 90, 120, 150], gamma=0.5)
         self.criterion = nn.CrossEntropyLoss(reduction='none').to(self.device)
 
@@ -90,6 +93,8 @@ class Solver(object):
         for batch_num, (data, target) in enumerate(self.train_loader):
             data, target = data.to(self.device), target.to(self.device)
             self.optimizer.zero_grad()
+            self.multi_loss_optimizer.zero_grad()
+
             output = self.model(data)
             loss = self.criterion(output, target)
             loss_mean = loss.mean()
@@ -100,6 +105,8 @@ class Solver(object):
                 plot_idx = self.get_train_batch_idx()
                 add_chart_point("TrainPerBatchStd", plot_idx, loss_std.item())
                 add_chart_point("TrainPerBatchMean", plot_idx, loss_mean.item())
+                add_chart_point("MeanWeight", plot_idx, self.multi_loss.weights[0].item())
+                add_chart_point("StdWeight", plot_idx, self.multi_loss.weights[1].item())
 
             if self.args.std_loss:
                 if self.args.per_class_std:
@@ -111,11 +118,13 @@ class Solver(object):
                             class_count += 1
                     loss = loss_mean + current_std / class_count
                 else:
-                    loss = loss_mean + loss_std
+                    loss = self.multi_loss(torch.cat([loss_mean.unsqueeze(0), loss_std.unsqueeze(0)]))
+
             else:
                 loss = loss_mean
             loss.backward()
             self.optimizer.step()
+            self.multi_loss_optimizer.step()
             train_loss += loss.item()
             prediction = torch.max(output, 1)  # second param "1" represents the dimension to be reduced
             total += target.size(0)
@@ -183,6 +192,9 @@ class Solver(object):
 
         begin_per_epoch_chart("TrainStd")
         begin_per_epoch_chart("TestStd")
+
+        begin_chart("StdWeight", "BatchIdx")
+        begin_chart("MeanWeight", "BatchIdx")
 
         reset_seed(0)
         accuracy = 0
