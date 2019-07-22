@@ -28,6 +28,7 @@ def main():
     parser.add_argument('--num_workers_test', default=2, type=int, help='number of workers for loading test data')
     parser.add_argument('--cuda', default=torch.cuda.is_available(), type=bool, help='whether cuda is in use')
     parser.add_argument('--std_loss', '-std', action='store_true', help='add std loss')
+    parser.add_argument('--per_class_std', '-pc_std', action='store_true', help='compute std per class')
     parser.add_argument('--train_batch_plot_freq', default=20, type=int, help='freq to plot batch statistics')
     args = parser.parse_args()
 
@@ -100,9 +101,19 @@ class Solver(object):
                 add_chart_point("TrainPerBatchStd", plot_idx, loss_std.item())
                 add_chart_point("TrainPerBatchMean", plot_idx, loss_mean.item())
 
-            loss = loss_mean
             if self.args.std_loss:
-                loss = loss + loss_std
+                if self.args.per_class_std:
+                    class_count = 0
+                    current_std = 0.0
+                    for i in range(len(CLASSES)):
+                        if loss[target == i].size(0) > 2:
+                            current_std = current_std + loss[target == i].std()
+                            class_count += 1
+                    loss = loss_mean + current_std / class_count
+                else:
+                    loss = loss_mean + loss_std
+            else:
+                loss = loss_mean
             loss.backward()
             self.optimizer.step()
             train_loss += loss.item()
