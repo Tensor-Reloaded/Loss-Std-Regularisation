@@ -78,7 +78,7 @@ class Solver(object):
         self.model = eval(self.args.model).to(self.device)
         self.multi_loss = MultiLossModel(2).to(self.device)
 
-        self.optimizer = optim.SGD(self.model.parameters(), lr=self.args.lr, momentum=self.args.momentum)
+        self.optimizer = optim.SGD(self.model.parameters(), lr=self.args.lr, momentum=self.args.momentum,weight_decay=self.args.wd)
         self.multi_loss_optimizer = optim.SGD(self.multi_loss.parameters(), lr = self.args.multi_loss_lr, momentum=0.2)
         self.scheduler = optim.lr_scheduler.MultiStepLR(self.optimizer, milestones=[30, 60, 90, 120, 150], gamma=0.5)
         self.criterion = nn.CrossEntropyLoss(reduction='none').to(self.device)
