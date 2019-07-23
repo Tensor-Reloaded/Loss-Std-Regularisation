@@ -18,7 +18,7 @@ CLASSES = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship'
 def main():
     parser = argparse.ArgumentParser(description="cifar-10 with PyTorch")
     parser.add_argument('--lr', default=0.01, type=float, help='learning rate')
-    parser.add_argument('--std_pen', default=2.0, type=float, help='learning rate')
+    parser.add_argument('--std_pen', default=1.0, type=float, help='learning rate')
     parser.add_argument('--multi_loss_lr', default=0.01, type=float, help='learning rate')
     parser.add_argument('--momentum', default=0.0, type=float, help='sgd momentum')
     parser.add_argument('--wd', default=0.0, type=float, help='weight decay')
@@ -119,7 +119,11 @@ class Solver(object):
                             class_count += 1
                     loss = loss_mean + current_std / class_count
                 else:
-                    loss = loss_mean + self.args.std_pen * loss_std
+                    if batch_num % 2 == 0:
+                        loss = loss_mean
+                    else:
+                        loss = self.args.std_pen * loss_std
+
                     # loss = self.multi_loss(torch.cat([loss_mean.unsqueeze(0), loss_std.unsqueeze(0)]))
 
             else:
