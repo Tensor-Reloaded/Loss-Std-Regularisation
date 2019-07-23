@@ -119,10 +119,7 @@ class Solver(object):
                             class_count += 1
                     loss = loss_mean + current_std / class_count
                 else:
-                    if epoch % 2 == 1:
-                        loss = loss_mean
-                    else:
-                        loss = self.args.std_pen * loss_std
+                    loss = loss_mean + self.args.std_pen * loss_std
 
                     # loss = self.multi_loss(torch.cat([loss_mean.unsqueeze(0), loss_std.unsqueeze(0)]))
 
