@@ -31,7 +31,7 @@ def main():
     parser.add_argument('--cuda', default=torch.cuda.is_available(), type=bool, help='whether cuda is in use')
     parser.add_argument('--std_loss', '-std', action='store_true', help='add std loss')
     parser.add_argument('--per_class_std', '-pc_std', action='store_true', help='compute std per class')
-    parser.add_argument('--train_batch_plot_freq', default=20, type=int, help='freq to plot batch statistics')
+    parser.add_argument('--train_batch_plot_freq', default=60, type=int, help='freq to plot batch statistics')
     args = parser.parse_args()
 
     solver = Solver(args)
@@ -83,7 +83,7 @@ class Solver(object):
         self.scheduler = optim.lr_scheduler.MultiStepLR(self.optimizer, milestones=[30, 60, 90, 120, 150], gamma=0.5)
         self.criterion = nn.CrossEntropyLoss(reduction='none').to(self.device)
 
-    def train(self):
+    def train(self, epoch):
         print("train:")
         self.model.train()
         train_loss = 0
@@ -119,7 +119,7 @@ class Solver(object):
                             class_count += 1
                     loss = loss_mean + current_std / class_count
                 else:
-                    if batch_num % 2 == 0:
+                    if epoch % 2 == 1:
                         loss = loss_mean
                     else:
                         loss = self.args.std_pen * loss_std
@@ -207,7 +207,7 @@ class Solver(object):
         for epoch in range(1, self.args.epoch + 1):
             self.scheduler.step(epoch)
             print("\n===> epoch: %d/200" % epoch)
-            train_result = self.train()
+            train_result = self.train(epoch)
             add_chart_point("TrainAcc", epoch, train_result[1])
             add_chart_point("TrainLoss", epoch, train_result[0])
             add_chart_point("TrainStd", epoch, train_result[2])
