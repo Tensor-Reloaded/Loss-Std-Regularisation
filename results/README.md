@@ -1,7 +1,7 @@
 # Here you will find the results of the experiments conducted for "Loss Std Regularization"
 The results are separated in folders by dataset/task. In each such folder, there is a folder for each model which was used. 
 
-Every end folder contains the code for the model, a checkpoint of the best epoch, csv and diagram files containing metrics from the training process and a README file describing the configuration used to obtain said results. In addition, the folders will contain similar files and descriptions of the baseline performance of said model withouth applying our technique.
+Every end folder contains the code for the model, a checkpoint of the best epoch, tsv and diagram files containing metrics from the training process and a README file describing the configuration used to obtain said results. In addition, the folders will contain similar files and descriptions of the baseline performance of said model withouth applying our technique.
 
 So far the following datasets/tasks and models were experimented upon:
 - [ ] MNIST

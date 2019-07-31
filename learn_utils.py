@@ -4,6 +4,7 @@
     - progress_bar: progress bar mimic xlua.progress.
 '''
 import random
+import os
 
 import numpy as np
 import progressbar
@@ -109,16 +110,24 @@ def reset_seed(seed):
     np.random.seed(seed)
 
 
-def begin_chart(chart_name, x_axis_name):
-    print(f'{{"chart":"{chart_name}", "axis": "{x_axis_name}"}}')
+def begin_chart(chart_name, x_axis_name,save_path=None):
+    if save_path is not None:
+        with open(os.path.join(save_path,chart_name + '.tsv'),"w") as fd:
+            fd.write(str(x_axis_name)+"\t"+chart_name+"\n")
+    else:
+        print(f'{{"chart":"{chart_name}", "axis": "{x_axis_name}"}}')
 
 
-def begin_per_epoch_chart(chart_name):
-    begin_chart(chart_name, 'Epoch')
+def begin_per_epoch_chart(chart_name,save_path=None):
+    begin_chart(chart_name, 'Epoch',save_path=save_path)
 
 
-def add_chart_point(chart_name, x, y):
-    print(f'{{"chart": "{chart_name}", "x":{x}, "y":{y}}}')
+def add_chart_point(chart_name, x, y,save_path=None):
+    if save_path is not None:
+        with open(os.path.join(save_path,chart_name + '.tsv'),"a+") as fd:
+            fd.write(str(x)+"\t"+str(y)+"\n")
+    else:
+        print(f'{{"chart": "{chart_name}", "x":{x}, "y":{y}}}')
 
 def compute_weights_l1_norm(model):
     norm_sum = 0

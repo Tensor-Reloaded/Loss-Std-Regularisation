@@ -1,3 +1,6 @@
+#Normal: python main.py --lr=0.01 --wd=0.0001 --model="VGG('VGG11')" --epoch=200 --train_batch_size=128 --save_path="results/CIFAR-10/VGG-11/baseline/metrics"
+#Std loss reg: python main.py --lr=0.01 --wd=0.0001 --model="VGG('VGG11')" --epoch=200 --train_batch_size=128 --save_path="results/CIFAR-10/VGG-11/metrics" -std
+
 import torch.optim as optim
 import torch.utils.data
 import torch.backends.cudnn as cudnn
@@ -30,8 +33,11 @@ def main():
     parser.add_argument('--num_workers_test', default=2, type=int, help='number of workers for loading test data')
     parser.add_argument('--cuda', default=torch.cuda.is_available(), type=bool, help='whether cuda is in use')
     parser.add_argument('--std_loss', '-std', action='store_true', help='add std loss')
+    parser.add_argument('--nesterov', action='store_true', help='Use nesterov momentum')
     parser.add_argument('--per_class_std', '-pc_std', action='store_true', help='compute std per class')
     parser.add_argument('--train_batch_plot_freq', default=60, type=int, help='freq to plot batch statistics')
+    parser.add_argument('--save_path', default="results", type=str, help='path to folder where results should be saved')
+    parser.add_argument('--seed', default=0, type=int, help='Seed to be used by randomizer')
     args = parser.parse_args()
 
     solver = Solver(args)
@@ -78,7 +84,7 @@ class Solver(object):
         self.model = eval(self.args.model).to(self.device)
         self.multi_loss = MultiLossModel(2).to(self.device)
 
-        self.optimizer = optim.SGD(self.model.parameters(), lr=self.args.lr, momentum=self.args.momentum,weight_decay=self.args.wd)
+        self.optimizer = optim.SGD(self.model.parameters(), lr=self.args.lr, momentum=self.args.momentum,weight_decay=self.args.wd, nesterov=self.args.nesterov)
         self.multi_loss_optimizer = optim.SGD(self.multi_loss.parameters(), lr = self.args.multi_loss_lr, momentum=0.2)
         self.scheduler = optim.lr_scheduler.MultiStepLR(self.optimizer, milestones=[30, 60, 90, 120, 150], gamma=0.5)
         self.criterion = nn.CrossEntropyLoss(reduction='none').to(self.device)
@@ -104,10 +110,10 @@ class Solver(object):
 
             if batch_num % self.args.train_batch_plot_freq == 0:
                 plot_idx = self.get_train_batch_idx()
-                add_chart_point("TrainPerBatchStd", plot_idx, loss_std.item())
-                add_chart_point("TrainPerBatchMean", plot_idx, loss_mean.item())
-                add_chart_point("MeanWeight", plot_idx, self.multi_loss.weights[0].item())
-                add_chart_point("StdWeight", plot_idx, self.multi_loss.weights[1].item())
+                add_chart_point("TrainPerBatchStd", plot_idx, loss_std.item(),self.args.save_path)
+                add_chart_point("TrainPerBatchMean", plot_idx, loss_mean.item(),self.args.save_path)
+                add_chart_point("MeanWeight", plot_idx, self.multi_loss.weights[0].item(),self.args.save_path)
+                add_chart_point("StdWeight", plot_idx, self.multi_loss.weights[1].item(),self.args.save_path)
 
             if self.args.std_loss:
                 if self.args.per_class_std:
@@ -159,8 +165,8 @@ class Solver(object):
 
                 total_std += loss_std.item()
 
-                add_chart_point("TestPerBatchStd", plot_idx, loss_std.item())
-                add_chart_point("TestPerBatchMean", plot_idx, loss_mean.item())
+                add_chart_point("TestPerBatchStd", plot_idx, loss_std.item(),self.args.save_path)
+                add_chart_point("TestPerBatchMean", plot_idx, loss_mean.item(),self.args.save_path)
 
                 loss = loss_mean
                 test_loss += loss.item()
@@ -173,8 +179,8 @@ class Solver(object):
 
         return test_loss / len(self.test_loader), test_correct / total , total_std / len(self.test_loader)
 
-    def save(self):
-        model_out_path = "model.pth"
+    def save(self,epoch,accuracy):
+        model_out_path = "checkpoints/model_%s_%.2f%%.pth" % (epoch,accuracy * 100)
         torch.save(self.model, model_out_path)
         print("Checkpoint saved to {}".format(model_out_path))
 
@@ -182,43 +188,41 @@ class Solver(object):
         self.load_data()
         self.load_model()
 
-        begin_per_epoch_chart("TrainAcc")
-        begin_per_epoch_chart("TestAcc")
-        begin_per_epoch_chart("TrainLoss")
-        begin_per_epoch_chart("TestLoss")
+        begin_per_epoch_chart("TrainAcc",self.args.save_path)
+        begin_per_epoch_chart("TestAcc",self.args.save_path)
+        begin_per_epoch_chart("TrainLoss",self.args.save_path)
+        begin_per_epoch_chart("TestLoss",self.args.save_path)
 
-        begin_chart("TrainPerBatchMean", "BatchIdx")
-        begin_chart("TestPerBatchMean", "BatchIdx")
+        begin_chart("TrainPerBatchMean", "BatchIdx",self.args.save_path)
+        begin_chart("TestPerBatchMean", "BatchIdx",self.args.save_path)
 
-        begin_chart("TrainPerBatchStd", "BatchIdx")
-        begin_chart("TestPerBatchStd", "BatchIdx")
+        begin_chart("TrainPerBatchStd", "BatchIdx",self.args.save_path)
+        begin_chart("TestPerBatchStd", "BatchIdx",self.args.save_path)
 
-        begin_per_epoch_chart("TrainStd")
-        begin_per_epoch_chart("TestStd")
+        begin_per_epoch_chart("TrainStd",self.args.save_path)
+        begin_per_epoch_chart("TestStd",self.args.save_path)
 
-        begin_chart("StdWeight", "BatchIdx")
-        begin_chart("MeanWeight", "BatchIdx")
+        begin_chart("StdWeight", "BatchIdx",self.args.save_path)
+        begin_chart("MeanWeight", "BatchIdx",self.args.save_path)
 
-        reset_seed(0)
+        reset_seed(2525)
         accuracy = 0
         for epoch in range(1, self.args.epoch + 1):
             self.scheduler.step(epoch)
             print("\n===> epoch: %d/200" % epoch)
             train_result = self.train(epoch)
-            add_chart_point("TrainAcc", epoch, train_result[1])
-            add_chart_point("TrainLoss", epoch, train_result[0])
-            add_chart_point("TrainStd", epoch, train_result[2])
-            print(train_result)
+            add_chart_point("TrainAcc", epoch, train_result[1],self.args.save_path)
+            add_chart_point("TrainLoss", epoch, train_result[0],self.args.save_path)
+            add_chart_point("TrainStd", epoch, train_result[2],self.args.save_path)
             test_result = self.test()
 
-            add_chart_point("TestAcc", epoch, test_result[1])
-            add_chart_point("TestLoss", epoch, test_result[0])
-            add_chart_point("TestStd", epoch, test_result[2])
+            add_chart_point("TestAcc", epoch, test_result[1],self.args.save_path)
+            add_chart_point("TestLoss", epoch, test_result[0],self.args.save_path)
+            add_chart_point("TestStd", epoch, test_result[2],self.args.save_path)
 
-            accuracy = max(accuracy, test_result[1])
-            if epoch == self.args.epoch:
-                print("===> BEST ACC. PERFORMANCE: %.3f%%" % (accuracy * 100))
-                self.save()
+            if accuracy < test_result[1]:
+                accuracy = test_result[1]
+                self.save(epoch,accuracy)
 
 
 if __name__ == '__main__':
