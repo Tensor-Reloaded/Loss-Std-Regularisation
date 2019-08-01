@@ -1,5 +1,6 @@
-#Normal: python main.py --lr=0.01 --wd=0.0001 --model="VGG('VGG11')" --epoch=200 --train_batch_size=128 --save_path="results/CIFAR-10/VGG-11/baseline/metrics"
-#Std loss reg: python main.py --lr=0.01 --wd=0.0001 --model="VGG('VGG11')" --epoch=200 --train_batch_size=128 --save_path="results/CIFAR-10/VGG-11/metrics" -std
+#Std loss reg: python main.py --lr=0.01 --wd=0.0001 --model="VGG('VGG11')" --epoch=200 --train_batch_size=128 --save_path="results/CIFAR-10/VGG-11/runs/run_1/metrics" -std --std_pen=0.25 --std_pen_milestones 5 10 100 150 --std_pen_gamma=2.0
+#Normal: python main.py --lr=0.01 --wd=0.0001 --model="VGG('VGG11')" --epoch=200 --train_batch_size=128 --save_path="results/CIFAR-10/VGG-11/runs/run_1/baseline/metrics"
+
 
 import torch.optim as optim
 import torch.utils.data
@@ -22,7 +23,7 @@ def main():
     parser = argparse.ArgumentParser(description="cifar-10 with PyTorch")
     parser.add_argument('--lr', default=0.01, type=float, help='learning rate')
     parser.add_argument('--std_pen', default=1.0, type=float, help='learning rate')
-    parser.add_argument('--multi_loss_lr', default=0.01, type=float, help='learning rate')
+    # parser.add_argument('--multi_loss_lr', default=0.01, type=float, help='learning rate')
     parser.add_argument('--momentum', default=0.0, type=float, help='sgd momentum')
     parser.add_argument('--wd', default=0.0, type=float, help='weight decay')
     parser.add_argument('--model', default="VGG('VGG19')", type=str, help='what model to use')
@@ -38,6 +39,10 @@ def main():
     parser.add_argument('--train_batch_plot_freq', default=60, type=int, help='freq to plot batch statistics')
     parser.add_argument('--save_path', default="results", type=str, help='path to folder where results should be saved')
     parser.add_argument('--seed', default=0, type=int, help='Seed to be used by randomizer')
+    parser.add_argument('--lr_milestones', nargs='+', type=int,default=[30, 60, 90, 120, 150], help='Lr Milestones')
+    parser.add_argument('--lr_gamma', default=0.5, type=float, help='Lr gamma')
+    parser.add_argument('--std_pen_milestones', nargs='+', type=int,default=[15,30, 90, 150], help='Std pen Milestones')
+    parser.add_argument('--std_pen_gamma', default=1.0, type=float, help='Std pen gamma')
     args = parser.parse_args()
 
     solver = Solver(args)
@@ -82,11 +87,11 @@ class Solver(object):
             self.device = torch.device('cpu')
 
         self.model = eval(self.args.model).to(self.device)
-        self.multi_loss = MultiLossModel(2).to(self.device)
+        # self.multi_loss = MultiLossModel(2).to(self.device)
 
         self.optimizer = optim.SGD(self.model.parameters(), lr=self.args.lr, momentum=self.args.momentum,weight_decay=self.args.wd, nesterov=self.args.nesterov)
-        self.multi_loss_optimizer = optim.SGD(self.multi_loss.parameters(), lr = self.args.multi_loss_lr, momentum=0.2)
-        self.scheduler = optim.lr_scheduler.MultiStepLR(self.optimizer, milestones=[30, 60, 90, 120, 150], gamma=0.5)
+        # self.multi_loss_optimizer = optim.SGD(self.multi_loss.parameters(), lr = self.args.multi_loss_lr, momentum=0.2)
+        self.scheduler = optim.lr_scheduler.MultiStepLR(self.optimizer, milestones=self.args.lr_milestones, gamma=self.args.lr_gamma)
         self.criterion = nn.CrossEntropyLoss(reduction='none').to(self.device)
 
     def train(self, epoch):
@@ -100,7 +105,7 @@ class Solver(object):
         for batch_num, (data, target) in enumerate(self.train_loader):
             data, target = data.to(self.device), target.to(self.device)
             self.optimizer.zero_grad()
-            self.multi_loss_optimizer.zero_grad()
+            # self.multi_loss_optimizer.zero_grad()
 
             output = self.model(data)
             loss = self.criterion(output, target)
@@ -112,8 +117,8 @@ class Solver(object):
                 plot_idx = self.get_train_batch_idx()
                 add_chart_point("TrainPerBatchStd", plot_idx, loss_std.item(),self.args.save_path)
                 add_chart_point("TrainPerBatchMean", plot_idx, loss_mean.item(),self.args.save_path)
-                add_chart_point("MeanWeight", plot_idx, self.multi_loss.weights[0].item(),self.args.save_path)
-                add_chart_point("StdWeight", plot_idx, self.multi_loss.weights[1].item(),self.args.save_path)
+                # add_chart_point("MeanWeight", plot_idx, self.multi_loss.weights[0].item(),self.args.save_path)
+                # add_chart_point("StdWeight", plot_idx, self.multi_loss.weights[1].item(),self.args.save_path)
 
             if self.args.std_loss:
                 if self.args.per_class_std:
@@ -133,7 +138,7 @@ class Solver(object):
                 loss = loss_mean
             loss.backward()
             self.optimizer.step()
-            self.multi_loss_optimizer.step()
+            # self.multi_loss_optimizer.step()
             train_loss += loss.item()
             prediction = torch.max(output, 1)  # second param "1" represents the dimension to be reduced
             total += target.size(0)
@@ -209,6 +214,8 @@ class Solver(object):
         accuracy = 0
         for epoch in range(1, self.args.epoch + 1):
             self.scheduler.step(epoch)
+            if epoch in self.args.std_pen_milestones:
+                 self.args.std_pen *= self.args.std_pen_gamma
             print("\n===> epoch: %d/200" % epoch)
             train_result = self.train(epoch)
             add_chart_point("TrainAcc", epoch, train_result[1],self.args.save_path)
