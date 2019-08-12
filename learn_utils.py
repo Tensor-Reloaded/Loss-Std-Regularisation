@@ -105,9 +105,12 @@ def reset_seed(seed):
     Sets seed of all random number generators used to the same seed, given as argument
     WARNING: for full reproducibility of training, torch.backends.cudnn.deterministic = True is also needed!
     """
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
     torch.manual_seed(seed)
-    random.seed(seed)
+    torch.cuda.manual_seed_all(seed)
     np.random.seed(seed)
+    random.seed(seed)
 
 
 def begin_chart(chart_name, x_axis_name,save_path=None):

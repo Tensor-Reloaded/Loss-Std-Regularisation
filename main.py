@@ -22,7 +22,8 @@ CLASSES = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship'
 def main():
     parser = argparse.ArgumentParser(description="cifar-10 with PyTorch")
     parser.add_argument('--lr', default=0.01, type=float, help='learning rate')
-    parser.add_argument('--std_pen', default=1.0, type=float, help='learning rate')
+    parser.add_argument('--std_pen', default=1.0, type=float, help='std loss coeficient')
+    parser.add_argument('--mean_pen', default=1.0, type=float, help='mean loss coeficient')
     # parser.add_argument('--multi_loss_lr', default=0.01, type=float, help='learning rate')
     parser.add_argument('--momentum', default=0.0, type=float, help='sgd momentum')
     parser.add_argument('--wd', default=0.0, type=float, help='weight decay')
@@ -95,7 +96,6 @@ class Solver(object):
         self.criterion = nn.CrossEntropyLoss(reduction='none').to(self.device)
 
     def train(self, epoch):
-        print("train:")
         self.model.train()
         train_loss = 0
         train_correct = 0
@@ -130,7 +130,7 @@ class Solver(object):
                             class_count += 1
                     loss = loss_mean + current_std / class_count
                 else:
-                    loss = loss_mean + self.args.std_pen * loss_std
+                    loss = self.args.mean_pen * loss_mean + self.args.std_pen * loss_std
 
                     # loss = self.multi_loss(torch.cat([loss_mean.unsqueeze(0), loss_std.unsqueeze(0)]))
 
@@ -152,7 +152,6 @@ class Solver(object):
         return train_loss / len(self.train_loader), train_correct / total, total_std / len(self.train_loader)
 
     def test(self):
-        print("test:")
         self.model.eval()
         test_loss = 0
         test_correct = 0
@@ -210,13 +209,13 @@ class Solver(object):
         begin_chart("StdWeight", "BatchIdx",self.args.save_path)
         begin_chart("MeanWeight", "BatchIdx",self.args.save_path)
 
-        reset_seed(2525)
+        reset_seed(225)
         accuracy = 0
         for epoch in range(1, self.args.epoch + 1):
             self.scheduler.step(epoch)
             if epoch in self.args.std_pen_milestones:
                  self.args.std_pen *= self.args.std_pen_gamma
-            print("\n===> epoch: %d/200" % epoch)
+            print("\n===> epoch: %d/%d" % (epoch,self.args.epoch))
             train_result = self.train(epoch)
             add_chart_point("TrainAcc", epoch, train_result[1],self.args.save_path)
             add_chart_point("TrainLoss", epoch, train_result[0],self.args.save_path)
