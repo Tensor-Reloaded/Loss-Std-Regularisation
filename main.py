@@ -93,7 +93,7 @@ class Solver(object):
         self.optimizer = optim.SGD(self.model.parameters(), lr=self.args.lr, momentum=self.args.momentum,weight_decay=self.args.wd, nesterov=self.args.nesterov)
         # self.multi_loss_optimizer = optim.SGD(self.multi_loss.parameters(), lr = self.args.multi_loss_lr, momentum=0.2)
         self.scheduler = optim.lr_scheduler.MultiStepLR(self.optimizer, milestones=self.args.lr_milestones, gamma=self.args.lr_gamma)
-        self.criterion = nn.CrossEntropyLoss(reduction='none').to(self.device)
+        self.criterion = nn.CrossEntropyLoss().to(self.device)
 
     def train(self, epoch):
         self.model.train()
@@ -209,7 +209,7 @@ class Solver(object):
         begin_chart("StdWeight", "BatchIdx",self.args.save_path)
         begin_chart("MeanWeight", "BatchIdx",self.args.save_path)
 
-        reset_seed(225)
+        reset_seed(self.args.seed)
         accuracy = 0
         for epoch in range(1, self.args.epoch + 1):
             self.scheduler.step(epoch)

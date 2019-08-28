@@ -44,6 +44,28 @@ def progress_bar(current, total, msg=None):
         sys.stdout.write('\n')
     sys.stdout.flush()
 
+def get_progress_bar(total):
+    format_custom_text = progressbar.FormatCustomText(
+        'Loss: %(loss).3f | Acc: %(acc).3f%% (%(c)d/%(t)d)',
+        dict(
+            loss=0,
+            acc=0,
+            c=0,
+            t=0,
+        ),
+    )
+    prog_bar = progressbar.ProgressBar(0, total, widgets=[
+        progressbar.Counter(), ' of {} '.format(total),
+        progressbar.Bar(),
+        ' ', progressbar.ETA(),
+        ' ', format_custom_text
+    ])
+    return prog_bar, format_custom_text
+
+def update_progress_bar(progress_bar_obj, index=None, loss=None, acc=None, c=None, t=None):
+    prog_bar, format_custom_text = progress_bar_obj
+    format_custom_text.update_mapping(loss=loss, acc=acc, c=c, t=t)
+    prog_bar.update(index)
 
 def format_time(seconds):
     days = int(seconds / 3600/24)
